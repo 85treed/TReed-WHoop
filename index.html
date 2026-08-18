@@ -36,60 +36,6 @@
     /* STYLE TWEAK: card softer + a hint of glow */
     .card { border-radius: 22px !important; box-shadow: var(--glass-shadow); transition: box-shadow 0.3s; }
     .card:hover { box-shadow: 0 1px 0 0 rgba(255,255,255,0.08) inset, 0 18px 50px rgba(0,0,0,0.50); }
-
-    /* ---- Setup overlay (WHOOP Client ID — not secret, just an app identifier) ---- */
-    #setupOverlay {
-      position: fixed; inset: 0; z-index: 9999;
-      background: rgba(5,5,6,0.92);
-      -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
-      display: none; align-items: center; justify-content: center;
-      padding: 24px;
-    }
-    #setupOverlay.is-visible { display: flex; }
-    #setupOverlay .setup-card {
-      max-width: 480px; width: 100%;
-      background: rgba(20,20,22,0.95);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 22px;
-      padding: 28px;
-      box-shadow: 0 30px 80px rgba(0,0,0,0.6);
-    }
-    #setupOverlay h2 {
-      font-family: 'Instrument Serif', Georgia, serif;
-      font-style: italic; font-weight: 400;
-      font-size: 30px; letter-spacing: -0.02em;
-      margin: 0 0 6px;
-    }
-    #setupOverlay .sub { color: var(--text-secondary); font-size: 13px; margin-bottom: 18px; line-height: 1.5; }
-    #setupOverlay label { display: block; font-size: 11px; letter-spacing: 0.14em; color: var(--text-tertiary); text-transform: uppercase; margin: 14px 0 6px; font-weight: 600; }
-    #setupOverlay input {
-      width: 100%; box-sizing: border-box; padding: 11px 13px;
-      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px; color: var(--text-primary); font: inherit; font-size: 13px;
-      font-family: var(--font-mono); outline: none;
-    }
-    #setupOverlay input:focus { border-color: var(--accent); }
-    #setupOverlay .actions { display: flex; gap: 10px; margin-top: 22px; }
-    #setupOverlay button {
-      flex: 1; padding: 12px 18px; border-radius: 10px;
-      background: rgba(224,118,88,0.18); border: 1px solid rgba(224,118,88,0.40);
-      color: var(--accent-hi); font: inherit; font-weight: 600; font-size: 13px;
-      cursor: pointer; transition: background 0.2s, transform 0.2s;
-      letter-spacing: 0.04em;
-    }
-    #setupOverlay button:hover { background: rgba(224,118,88,0.30); }
-    #setupOverlay button:active { transform: scale(0.98); }
-    #setupOverlay button.secondary { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); color: var(--text-secondary); }
-    .config-btn {
-      position: fixed; top: 14px; right: 14px; z-index: 100;
-      width: 38px; height: 38px; border-radius: 50%;
-      background: rgba(20,20,22,0.85); border: 1px solid rgba(255,255,255,0.08);
-      color: var(--text-secondary); cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
-      transition: background 0.2s, transform 0.2s;
-    }
-    .config-btn:hover { background: rgba(40,40,44,0.95); transform: scale(1.05); color: var(--text-primary); }
   </style>
 </head>
 <body>
@@ -785,6 +731,203 @@
     display: inline-block;
   }
   </style>
+
+  <script>
+  (function () {
+    var CIRCUMFERENCE = 603.19;
+
+    function $(id) { return document.getElementById(id); }
+    function cookie(name) {
+      var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+    function msToHm(ms) {
+      if (!ms && ms !== 0) return '—';
+      var totalMin = Math.round(ms / 60000);
+      var h = Math.floor(totalMin / 60), m = totalMin % 60;
+      return h + 'h ' + m + 'm';
+    }
+    function zoneClass(kind, value) {
+      if (value == null || isNaN(value)) return 'z-norm';
+      if (kind === 'recovery' || kind === 'sleep') {
+        if (value >= (kind === 'recovery' ? 67 : 85)) return 'z-good';
+        if (value >= (kind === 'recovery' ? 34 : 70)) return 'z-norm';
+        return 'z-bad';
+      }
+      if (kind === 'spo2') return value >= 95 ? 'z-good' : (value >= 90 ? 'z-norm' : 'z-warn');
+      return 'z-norm';
+    }
+    function setZone(id, cls) {
+      var el = $(id);
+      if (!el) return;
+      el.classList.remove('z-good', 'z-norm', 'z-warn', 'z-bad');
+      el.classList.add(cls);
+    }
+
+    function showConnected(isConnected) {
+      $('whoopDisconnected').style.display = isConnected ? 'none' : '';
+      $('whoopConnected').style.display = isConnected ? '' : 'none';
+    }
+
+    function fetchType(type) {
+      return fetch('/api/whoop-data?type=' + type, { credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) throw new Error('whoop_' + type + '_failed_' + r.status);
+          return r.json();
+        })
+        .then(function (json) {
+          return (json && json.records && json.records[0]) || null;
+        });
+    }
+
+    function render(recovery, sleep, cycle) {
+      // Recovery ring
+      var score = recovery && recovery.score && recovery.score.recovery_score;
+      if (score != null) {
+        var offset = CIRCUMFERENCE * (1 - Math.max(0, Math.min(100, score)) / 100);
+        $('whoopRecoveryRingFill').style.strokeDashoffset = offset;
+        $('whoopRecoveryRingFill').style.stroke =
+          score >= 67 ? '#6BE3A4' : (score >= 34 ? '#F2C063' : '#FF6B6B');
+        $('whoopRecoveryScore').textContent = Math.round(score);
+        $('whoopRecoveryLabel').textContent = score >= 67 ? 'Good' : (score >= 34 ? 'Adequate' : 'Low');
+      }
+      if (recovery && recovery.score && recovery.score.user_calibrating) {
+        $('whoopCalibrating').style.display = 'flex';
+      }
+
+      // HRV / RHR
+      var hrv = recovery && recovery.score && recovery.score.hrv_rmssd_milli;
+      var rhr = recovery && recovery.score && recovery.score.resting_heart_rate;
+      $('whoopHrv').textContent = hrv != null ? Math.round(hrv) : '—';
+      $('whoopRhr').textContent = rhr != null ? Math.round(rhr) : '—';
+      setZone('whoopZoneHrv', 'z-norm');
+      setZone('whoopZoneRhr', 'z-norm');
+
+      // Biomarkers
+      var skin = recovery && recovery.score && recovery.score.skin_temp_celsius;
+      var spo2 = recovery && recovery.score && recovery.score.spo2_percentage;
+      if (skin != null || spo2 != null) {
+        $('whoopBio').style.display = 'grid';
+        if (skin != null) $('whoopSkinTemp').textContent = (skin * 9 / 5 + 32).toFixed(1) + '°F';
+        if (spo2 != null) {
+          $('whoopSpo2').textContent = spo2.toFixed(0) + '%';
+          setZone('whoopZoneSpo2', zoneClass('spo2', spo2));
+        }
+      }
+
+      // Sleep
+      var sScore = sleep && sleep.score && sleep.score.sleep_performance_percentage;
+      var stages = sleep && sleep.score && sleep.score.stage_summary;
+      $('whoopSleepScore').textContent = sScore != null ? Math.round(sScore) + '%' : '—';
+      setZone('whoopZoneSleep', zoneClass('sleep', sScore));
+      if (stages) {
+        var awake = stages.total_awake_time_milli || 0;
+        var light = stages.total_light_sleep_time_milli || 0;
+        var deep = stages.total_slow_wave_sleep_time_milli || 0;
+        var rem = stages.total_rem_sleep_time_milli || 0;
+        var total = awake + light + deep + rem;
+        $('whoopSleepDuration').textContent = msToHm(light + deep + rem);
+        if (total > 0) {
+          $('whoopStages').style.display = '';
+          $('whoopStageRem').style.width = (rem / total * 100) + '%';
+          $('whoopStageDeep').style.width = (deep / total * 100) + '%';
+          $('whoopStageLight').style.width = (light / total * 100) + '%';
+          $('whoopStageAwake').style.width = (awake / total * 100) + '%';
+          $('whoopStageRemTxt').textContent = msToHm(rem);
+          $('whoopStageDeepTxt').textContent = msToHm(deep);
+          $('whoopStageLightTxt').textContent = msToHm(light);
+          $('whoopStageAwakeTxt').textContent = msToHm(awake);
+          $('whoopStagesMeta').textContent = msToHm(total) + ' total';
+        }
+      }
+      var resp = sleep && sleep.score && sleep.score.respiratory_rate;
+      if (resp != null) {
+        $('whoopBio').style.display = 'grid';
+        $('whoopResp').textContent = resp.toFixed(1) + '/min';
+      }
+
+      // Strain
+      var strain = cycle && cycle.score && cycle.score.strain;
+      $('whoopStrain').textContent = strain != null ? strain.toFixed(1) : '—';
+      setZone('whoopZoneStrain', 'z-norm');
+
+      // Today's call
+      if (score != null) {
+        $('whoopVerdict').style.display = '';
+        var badge = $('whoopVerdictBadge');
+        var reasons = [];
+        if (score >= 67) {
+          badge.textContent = 'Green';
+          badge.style.background = 'rgba(107,227,164,0.15)';
+          badge.style.color = '#6BE3A4';
+          badge.style.borderColor = 'rgba(107,227,164,0.4)';
+          $('whoopVerdictHeadline').textContent = 'Recovered — good day to push.';
+          reasons.push('Recovery is ' + Math.round(score) + '%, in the green zone.');
+        } else if (score >= 34) {
+          badge.textContent = 'Yellow';
+          badge.style.background = 'rgba(242,192,99,0.15)';
+          badge.style.color = '#F2C063';
+          badge.style.borderColor = 'rgba(242,192,99,0.4)';
+          $('whoopVerdictHeadline').textContent = 'Moderate recovery — train, but listen to your body.';
+          reasons.push('Recovery is ' + Math.round(score) + '%, in the yellow zone.');
+        } else {
+          badge.textContent = 'Red';
+          badge.style.background = 'rgba(255,107,107,0.15)';
+          badge.style.color = '#FF6B6B';
+          badge.style.borderColor = 'rgba(255,107,107,0.4)';
+          $('whoopVerdictHeadline').textContent = 'Low recovery — prioritize rest today.';
+          reasons.push('Recovery is ' + Math.round(score) + '%, in the red zone.');
+          $('whoopVerdictAvoid').style.display = '';
+          $('whoopVerdictAvoidText').textContent = 'High-strain training or heavy stimulants.';
+        }
+        if (sScore != null) reasons.push('Sleep performance was ' + Math.round(sScore) + '%.');
+        $('whoopVerdictReasons').textContent = reasons.join(' ');
+      }
+
+      $('whoopUpdated').textContent = 'updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function loadData() {
+      Promise.all([
+        fetchType('recovery').catch(function () { return null; }),
+        fetchType('sleep').catch(function () { return null; }),
+        fetchType('cycle').catch(function () { return null; }),
+      ]).then(function (results) {
+        render(results[0], results[1], results[2]);
+      }).catch(function () {
+        showConnected(false);
+      });
+    }
+
+    function init() {
+      var connected = cookie('whoop_connected') === '1';
+      showConnected(connected);
+      if (connected) loadData();
+
+      var params = new URLSearchParams(window.location.search);
+      if (params.has('whoop_connected') || params.has('whoop_error')) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      if (params.has('whoop_error')) {
+        $('whoopAuthStatus').textContent = 'Something went wrong connecting to WHOOP — please try again.';
+      }
+
+      $('whoopConnectBtn').addEventListener('click', function () {
+        window.location.href = '/api/whoop-authorize';
+      });
+      $('whoopDisconnectBtn').addEventListener('click', function () {
+        window.location.href = '/api/whoop-disconnect';
+      });
+      $('whoopRefreshBtn').addEventListener('click', loadData);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  })();
+  </script>
 
 </body>
 </html>
