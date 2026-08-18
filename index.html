@@ -36,6 +36,60 @@
     /* STYLE TWEAK: card softer + a hint of glow */
     .card { border-radius: 22px !important; box-shadow: var(--glass-shadow); transition: box-shadow 0.3s; }
     .card:hover { box-shadow: 0 1px 0 0 rgba(255,255,255,0.08) inset, 0 18px 50px rgba(0,0,0,0.50); }
+
+    /* ---- Setup overlay (WHOOP Client ID — not secret, just an app identifier) ---- */
+    #setupOverlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(5,5,6,0.92);
+      -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+      display: none; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    #setupOverlay.is-visible { display: flex; }
+    #setupOverlay .setup-card {
+      max-width: 480px; width: 100%;
+      background: rgba(20,20,22,0.95);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 22px;
+      padding: 28px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+    }
+    #setupOverlay h2 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-style: italic; font-weight: 400;
+      font-size: 30px; letter-spacing: -0.02em;
+      margin: 0 0 6px;
+    }
+    #setupOverlay .sub { color: var(--text-secondary); font-size: 13px; margin-bottom: 18px; line-height: 1.5; }
+    #setupOverlay label { display: block; font-size: 11px; letter-spacing: 0.14em; color: var(--text-tertiary); text-transform: uppercase; margin: 14px 0 6px; font-weight: 600; }
+    #setupOverlay input {
+      width: 100%; box-sizing: border-box; padding: 11px 13px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px; color: var(--text-primary); font: inherit; font-size: 13px;
+      font-family: var(--font-mono); outline: none;
+    }
+    #setupOverlay input:focus { border-color: var(--accent); }
+    #setupOverlay .actions { display: flex; gap: 10px; margin-top: 22px; }
+    #setupOverlay button {
+      flex: 1; padding: 12px 18px; border-radius: 10px;
+      background: rgba(224,118,88,0.18); border: 1px solid rgba(224,118,88,0.40);
+      color: var(--accent-hi); font: inherit; font-weight: 600; font-size: 13px;
+      cursor: pointer; transition: background 0.2s, transform 0.2s;
+      letter-spacing: 0.04em;
+    }
+    #setupOverlay button:hover { background: rgba(224,118,88,0.30); }
+    #setupOverlay button:active { transform: scale(0.98); }
+    #setupOverlay button.secondary { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); color: var(--text-secondary); }
+    .config-btn {
+      position: fixed; top: 14px; right: 14px; z-index: 100;
+      width: 38px; height: 38px; border-radius: 50%;
+      background: rgba(20,20,22,0.85); border: 1px solid rgba(255,255,255,0.08);
+      color: var(--text-secondary); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      transition: background 0.2s, transform 0.2s;
+    }
+    .config-btn:hover { background: rgba(40,40,44,0.95); transform: scale(1.05); color: var(--text-primary); }
   </style>
 </head>
 <body>
