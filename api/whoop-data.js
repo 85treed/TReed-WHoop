@@ -77,19 +77,27 @@ module.exports = async (req, res) => {
   }
 
   const url = `https://api.prod.whoop.com/developer/${path}?limit=1`;
-  let apiResp, apiJson;
+  let apiResp;
   try {
     apiResp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-    apiJson = await apiResp.json();
   } catch (err) {
-    res.status(502).json({ error: 'Failed to reach WHOOP API' });
+    res.status(502).json({ error: 'Failed to reach WHOOP API', detail: String(err), url });
     return;
   }
 
+  const bodyText = await apiResp.text();
   if (newCookies.length) res.setHeader('Set-Cookie', newCookies);
 
   if (!apiResp.ok) {
-    res.status(apiResp.status).json(apiJson);
+    res.status(apiResp.status).json({ error: 'WHOOP API error', status: apiResp.status, body: bodyText, url });
+    return;
+  }
+
+  let apiJson;
+  try {
+    apiJson = JSON.parse(bodyText);
+  } catch (err) {
+    res.status(502).json({ error: 'WHOOP API returned non-JSON response', status: apiResp.status, body: bodyText.slice(0, 500), url });
     return;
   }
 
